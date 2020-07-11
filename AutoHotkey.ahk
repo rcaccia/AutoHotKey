@@ -15,32 +15,36 @@
 ;-------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------
-; USEFUL KEYS TO REMEMBER
+; LEGEND
 ;
-; ^ = [Ctrl]
-; ! = [Alt]
-; + = [Shift]
-; # = [Windows button]
+; # = windows key
+; ^ = Ctrl
+; + = Shift
+;
 ;--------------------------------------------------------------------
 
 
-^!+h::Reload
+;--------------------------------------------------------------------
+; Basic stuff
+;--------------------------------------------------------------------
+^!+h::Reload ; reload this script
 
-; #z::Run www.autohotkey.com/docs/AutoHotkey.htm
+; #z::Run www.autohotkey.com
 ; #z::Run https://qalogin.gs.com
 
 #g::Run https://www.google.com
 
-
-;--------------------------------------------------------------------
-^
-
 ^/::Send {AppsKey}
 ^\::Send {AppsKey}
 
-
 ; Open a command prompt
-#c::   Run %ComSpec%
+#c::
+	Run %ComSpec%
+	Sleep, 300
+	Send f:{enter}cd \{enter}
+return
+;--------------------------------------------------------------------
+
 
 ;--------------------------------------------------------------------
 ; Note: From now on whenever you run AutoHotkey directly, this script
@@ -117,11 +121,9 @@ GetScreenWidth() {
 }
 
 GetScreenHeight() {
-
-SysGet, MonitorWorkArea, MonitorWorkArea, 1
-;MsgBox, MWAB = %MonitorWorkAreaBottom%
-Return %MonitorWorkAreaBottom%
-
+	SysGet, MonitorWorkArea, MonitorWorkArea, 1
+	;MsgBox, MWAB = %MonitorWorkAreaBottom%
+	Return %MonitorWorkAreaBottom%
 
   WinGetPos,TX,TY,TW,TH,ahk_class Shell_TrayWnd,,,
   TaskbarEdge := GetTaskbarEdge()
@@ -169,7 +171,7 @@ Monitor_Stats_Display()
 	    SysGet, Monitor, Monitor, %A_Index%
 	    SysGet, MWA, MonitorWorkArea, %A_Index%
 
-if( false )
+	if( false )
 	    Monitor_Info_Display(MonitorName, MWA)
 
 	    MsgBox, Monitor:`t#%A_Index%`nName:`t%MonitorName%
@@ -214,7 +216,43 @@ GetMonitorAt(x, y, default=1)
     return default 
 }
 
-Win_Move_Resize(Nx=0,Ny=0,w=0,h=0,mode="absolute")
+
+GetMonitor(hwnd := 0)
+{
+; Senses the Monitor of the provided window (by HWND). If no window is provided, this
+; function checks the Active Window. This can be useful for determining which monitor
+; the user is actively interacting with.
+
+; With minor modification, this function could also account for vertically positioned 
+; monitors.
+
+; If no hwnd is provided, use the Active Window
+	if (hwnd)
+		WinGetPos, winX, winY, winW, winH, ahk_id %hwnd%
+	else
+		WinGetActiveStats, winTitle, winW, winH, winX, winY
+
+	SysGet, numDisplays, MonitorCount
+	SysGet, idxPrimary, MonitorPrimary
+
+	Loop %numDisplays%
+	{	SysGet, mon, MonitorWorkArea, %a_index%
+	; Left may be skewed on Monitors past 1
+		if (a_index > 1)
+			monLeft -= 10
+	; Right overlaps Left on Monitors past 1
+		else if (numDisplays > 1)
+			monRight -= 10
+	; Tracked based on X. Cannot properly sense on Windows "between" monitors
+		if (winX >= monLeft && winX < monRight)
+			return %a_index%
+	}
+; Return Primary Monitor if can't sense
+	return idxPrimary
+}
+
+
+Win_Move_Resize(Nx=0,Ny=0,w=0,h=0,mode="absolute",MonitorNumber="")
 {
 	;------------------------------------------------------------------------------------------------------------------
 	SysGet, Num_Monitors, MonitorCount ; Gets number of display monitors
@@ -232,13 +270,30 @@ Win_Move_Resize(Nx=0,Ny=0,w=0,h=0,mode="absolute")
 ;listvars
 
 	WinGetPos, X1, Y1, W1, H1, A
-;	ScreenX := GetScreenLeft()
-;	ScreenY := GetScreenTop()
-;	ScreenW := GetScreenWidth()  ; #### * Num_Monitors
-;	ScreenH := GetScreenHeight()
+	ScreenX := GetScreenLeft()
+	ScreenY := GetScreenTop()
+	ScreenW := GetScreenWidth()  ; #### * Num_Monitors
+	ScreenH := GetScreenHeight()
 
-    Monitor_From := GetMonitorAt(X1+1,Y1+1) ; get monitor number based on top left corner of window
+if (false) ; turn this to true for debugging purposes only
+	MsgBox, GetScreen:
+		. `n Left: %ScreenX%
+		. `n Top: %ScreenY%
+		. `n Right: %ScreenW%
+		. `n Bottom: %ScreenH%
+
+
+;    Monitor_From := GetMonitorAt(X1+1,Y1+1) 	; get monitor number based on top left corner of window
+	Monitor_From := GetMonitorAt(X1+W1/2,Y1+H1/2)
+;    	Monitor_From := GetMonitor() 		; get monitor number based on top left corner of window
 	SysGet, MonitorName, MonitorName, %Monitor_From%
+
+	if (MonitorNumber<>"")
+	{
+		Monitor_From := MonitorNumber
+	}
+
+
 	SysGet, MWA1, MonitorWorkArea, %Monitor_From%  ; Gets Monitor Work Area of current monitor
 	Screen1X := MWA1Left
 	Screen1Y := MWA1Top
@@ -281,14 +336,10 @@ if (false) ; turn this to true for debugging purposes only
 		}
 
 		if ( (Monitor_From <> Monitor_To) && (X1 <> Screen1X) )
-		{
 			X2 := Max( X2, Screen1X ) ; snap to monitor left edge
-		}
 
 		if (Monitor_From <> Monitor_To && Y2 <> Screen1Y )
-		{
 			Y2 := Max( Y2, Screen1Y ) ; snap to monitor top edge
-		}
 
 		if (-1 = Monitor_To_BottomRight )
 		{ 	;------ Do not move too far down-right ------
@@ -299,10 +350,10 @@ if (false) ; turn this to true for debugging purposes only
 
 	if ( "absolute" = mode )
 	{
-		X2 := Screen1X + Nx * Screen1W / 2
-		Y2 := Screen1Y + Ny * Screen1H / 2
-		W2 := w * Screen1W / 2
-		H2 := h * Screen1H / 2
+		X2 := floor( Screen1X + Nx * Screen1W * 0.5 )
+		Y2 := floor( Screen1Y + Ny * Screen1H * 0.5 )
+		W2 := floor( w * Screen1W * 0.5 )
+		H2 := floor( h * Screen1H * 0.5 )
 	}
 
 	if ( "resize" = mode )
@@ -351,12 +402,22 @@ if (false) ; turn this to true for debugging purposes only
 			W2 := Min( W2, MWA2Right  -X2 )
 			H2 := Min( H2, MWa2Bottom -Y2 )
 		}
-
 	}
+
+	X2 := round( X2 )
+	Y2 := round( Y2 )
+	W2 := round( W2 )
+	H2 := round( H2 )
+
+WinGet, Win_ID, , A
+WinGet, Win_Status, MinMax, ahk_id %Win_ID%
+If (Win_Status = 1)  ; the window is maximized
+    WinRestore, ahk_id %Win_ID%
 
 if (false) ; turn this to true for debugging purposes only
 {
-	MsgBox, Monitor work Area:
+	MyMessage = Monitor work Area:
+		. `n Window Status %Win_status%
 		. `n Monitor_from %Monitor_From%
 		. `n Left: %MWA1Left%
 		. `n Top: %MWA1Top%
@@ -390,9 +451,11 @@ if (false) ; turn this to true for debugging purposes only
 		. `n -----------------------
 		. `n dW: %dW%
 		. `n dH: %dH%
+	MsgBox, %MyMessage%
+	Clipboard := MyMessage
 }
 
-	WinMove, A, , X2, Y2, W2, H2
+	WinMove, A, , x2, y2, w2, h2
 	return
 }
 
@@ -401,21 +464,30 @@ if (false) ; turn this to true for debugging purposes only
 ; Some test functions to understand how to deal with multiple monnitors
 ;#######################################################################
 #^+S::Monitor_Stats_Display()
+
+#^+L::WinList()
+#^+Q::Window_Info()
+
+
 #^+w::Which_Monitor_am_I_in(1000,1000)
 #^+e::Which_Monitor_am_I_in(2000,1000)
 #^+r::Which_Monitor_am_I_in(3000,1000)
 #^+t::Which_Monitor_am_I_in(4000,2000)
 ;#######################################################################
 
-#Numpad1::Win_Move_Resize(0,1,1,1)
-#Numpad2::Win_Move_Resize(0,1,2,1)
-#Numpad3::Win_Move_Resize(1,1,1,1)
-#Numpad4::Win_Move_Resize(0,0,1,2)
-#Numpad5::Win_Move_Resize(0,0,2,2)
-#Numpad6::Win_Move_Resize(1,0,1,2)
-#Numpad7::Win_Move_Resize(0,0,1,1)
-#Numpad8::Win_Move_Resize(0,0,2,1)
-#Numpad9::Win_Move_Resize(1,0,1,1)
+#Numpad1::Win_Move_Resize(0,1,1,1,"absolute")
+#Numpad2::Win_Move_Resize(0,1,2,1,"absolute")
+#Numpad3::Win_Move_Resize(1,1,1,1,"absolute")
+#Numpad4::Win_Move_Resize(0,0,1,2,"absolute")
+#Numpad5::Win_Move_Resize(0,0,2,2,"absolute")
+#Numpad6::Win_Move_Resize(1,0,1,2,"absolute")
+#Numpad7::Win_Move_Resize(0,0,1,1,"absolute")
+#Numpad8::Win_Move_Resize(0,0,2,1,"absolute")
+#Numpad9::Win_Move_Resize(1,0,1,1,"absolute")
+
+
+#^Numpad2::Win_Move_Resize(0,1,2,1,"absolute", 2)
+#^!Numpad2::Win_Move_Resize(0,1.5,2,0.5,"absolute", 2)
 
 
 #^+Down::Win_Move_Resize( 0,0, 0.0, 0.1,"resize")
@@ -427,6 +499,17 @@ if (false) ; turn this to true for debugging purposes only
 #^Down::Win_Move_Resize(  0 ,  0.1,0,0,"relative")
 #^Left::Win_Move_Resize( -0.1,   0,0,0,"relative")
 #^Right::Win_Move_Resize( 0.1,   0,0,0,"relative")
+
+
+#^!+Down::Win_Move_Resize( 0,0, 0. 0, 0.02,"resize")
+#^!+Up::Win_Move_Resize(   0,0, 0.00,-0.02,"resize")
+#^!+Left::Win_Move_Resize( 0,0,-0.02, 0.00,"resize")
+#^!+Right::Win_Move_Resize(0,0, 0.02, 0.00,"resize")
+
+#^!Up::Win_Move_Resize(    0   , -0.02,0,0,"relative")
+#^!Down::Win_Move_Resize(  0   ,  0.02,0,0,"relative")
+#^!Left::Win_Move_Resize( -0.02,  0   ,0,0,"relative")
+#^!Right::Win_Move_Resize( 0.02,  0   ,0,0,"relative")
 
 
 ;#######################################################################
@@ -452,6 +535,35 @@ Send ^w
 return
 ;#######################################################################
 
+
+WinList()
+{
+	Run,taskmgr.exe,,HIDE
+	DetectHiddenWindows,ON
+	WinWait,ahk_class #32770
+	ControlGet,Tab,Tab,,SysTabControl321
+	loop,% Tab-1
+	{
+		ControlSend,SysTabControl321,{LEFT}
+	}
+	WinWait,ahk_class #32770
+	ControlGet,List,List,,SysListView321
+	WinClose
+	DetectHiddenWindows,Off
+	loop,parse,List,`n
+	WinList.="`n" SubStr(A_loopfield,1,InStr(A_LoopField,A_TAB))
+	Retrn:=WinList ? WinList : 0
+	Msgbox %Retrn%
+	Return
+}
+
+#!A:: ; <-- use the alt-a key to grab the active window's instance ID
+{
+	WinGet, WinID, ID, A
+	MyWin = ahk_id %WinID%
+	MsgBox %WinID% " " %ID% " " %MyWin%
+	Return
+}
 
 ;GetActiveWindowInfo()
 ;{
@@ -488,14 +600,22 @@ Get_Info() {
 ;	MsgBox, Monitor number %A_Index%
 
 	WinGetPos, X1, Y1, W1, H1, A
-    Monitor := GetMonitorAt(X1,Y1)
-
+	MonitorB := GetMonitorAt(X1+W1/2,Y1+H1/2)
+	Monitor := GetMonitor()
+	
 	WinGetPos,TX,TY,TW,TH,ahk_class Shell_TrayWnd,,,
 	TaskbarEdge := GetTaskbarEdge()
 
-	MsgBox, Window coordinates:
-		. `n %X1%, %Y1%, %W1%, %H1%
+	WinGetClass, WinClass, A
+	WinGetTitle, WindowName, A
+
+	MsgBox Window Information:
+		. `n %WinClass%
+		. `n %WindowName%
+		. `n 
+		. `n Coordinates: %X1%, %Y1%, %W1%, %H1%
 		. `n Monitor # %Monitor%
+		. `n Monitor B # %MonitorB%
 		. `n
 		. `n 'Monitor Info:'
 		. `n %TX%, %TY%, %TW%, %TH%
@@ -508,28 +628,209 @@ Get_Info() {
 		. `n Monitor Work Area  Right = %MonitorWorkAreaRight%
 
 
+	; WinList()
+
 ;	listvars
 }
 
 #^+i::Get_Info()
 
-#!e::Run C:\Users\roca4364\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\This PC.lnk
 
-;#######################################################################
-; USEFUL FOR OUTLOOK
-;#######################################################################
+#IfWinActive ahk_class TscShellContainerClass
+	^Capslock::           ; Ctrl+Caps Lock (couldn't make Ctrl+Shift+Caps Lock work for some reason)
+	; Need a short sleep here for focus to restore properly.
+	Sleep 50
+	;MsgBox, Received Remote Desktop minimize hotkey %WindowName%   ; uncomment for debugging
+	WinMinimize A    ; need A to specify Active window
+   	return
+#IfWinActive
 
-#ifWinActive, ahk_exe outlook.exe
-{ 
-	^+!v::Send !H!V!T
-}
+#IfWinActive WhatsApp
+	Enter::Send {Shift}+{Enter}
+	^Enter::Send {Enter}
+#IfWinActive
 
+
+#IfWinActive Signal
+	Enter::Send {Shift}+{Enter}
+#IfWinActive
+
+
++!v::Paste_ClipText()
 Paste_ClipText() {
 	ClipSaved := ClipboardAll ; save clipboard
 	clipboard = %clipboard%   ; Convert any copied files, HTML, or other formatted text to plain text.
 	Send ^v
-	Clipboard := ClipSaved   ; Restore the original clipboard. Note the use of Clipboard (not ClipboardAll).
+	Clipboard := ClipSaved    ; Restore the original clipboard. Note the use of Clipboard (not ClipboardAll).
 }
 
-^+v::Paste_ClipText()
 
+Window_Info()
+{
+	WinGetClass, WinClass, A
+	WinGetTitle, WindowName, A
+	Msgbox "%WinClass%" " " "%WindowName%"
+}
+
+^CapsLock::MinimizeRemoteDesktop()
+MinimizeRemoteDesktop()
+{
+	WinGetTitle, WindowName, A
+	If InStr( WindowName, "Remote Desktop" ) > 0
+		WinMinimize A
+}
+
+#^!M::AllMonitorsInfo()
+AllMonitorsInfo()
+{
+; Example #2: This is a working script that displays info about each monitor:
+SysGet, MonitorCount, MonitorCount
+SysGet, MonitorPrimary, MonitorPrimary
+MsgBox, Monitor Count:`t%MonitorCount%`nPrimary Monitor:`t%MonitorPrimary%
+Loop, %MonitorCount%
+{
+    SysGet, MonitorName, MonitorName, %A_Index%
+    SysGet, Monitor, Monitor, %A_Index%
+    SysGet, MonitorWorkArea, MonitorWorkArea, %A_Index%
+    MsgBox, Monitor:`t#%A_Index%`nName:`t%MonitorName%`nLeft:`t%MonitorLeft% (%MonitorWorkAreaLeft% work)`nTop:`t%MonitorTop% (%MonitorWorkAreaTop% work)`nRight:`t%MonitorRight% (%MonitorWorkAreaRight% work)`nBottom:`t%MonitorBottom% (%MonitorWorkAreaBottom% work)
+}
+}
+
+
+FlashWindow()
+{
+	hWnd := WinActive( "A" )
+	Loop 4 {
+	DllCall( "FlashWindow", UInt,hWnd, Int,True )
+	Sleep 500
+	}
+	DllCall( "FlashWindow", UInt,hWnd, Int,False )
+}
+
+
+IsWindowAlwaysOnTop(windowTitle)
+{
+	WinGet, windowStyle, ExStyle, %windowTitle%
+	isWindowAlwaysOnTop := if (windowStyle & 0x8) ? false : true ; 0x8 is WS_EX_TOPMOST.
+	return isWindowAlwaysOnTop
+}
+
+
+#^SPACE::ToggleWindowAlwaysOnTop()
+ToggleWindowAlwaysOnTop()
+{
+	WinGetTitle, activeWindow, A
+	if IsWindowAlwaysOnTop(activeWindow) {
+		notificationMessage := "" . activeWindow . "" " `n is now always ON TOP."
+	}
+	else {
+		notificationMessage := "" . activeWindow . "" " `n is NOT always on top."
+	}
+	Winset, Alwaysontop, , A
+
+	Progress, zh0 fs18, %notificationMessage%
+	Sleep 1000 ; Let it display for 3 seconds.
+	Progress, Off
+}
+
+^+z::
+	;MinimizeRemoteDesktop()
+	WinActivate, Zoom
+	WinRestore, Zoom
+;	if (IsWindowAlwaysOnTop(Zoom) )
+;	{
+;		ToggleWindowAlwaysOnTop()
+;	}
+	Send {enter}
+	Sleep 500
+	Send ^v
+return
+
+ParseZoom( text )
+{
+	urlR := "/(http|ftp|https):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/"
+
+	urlR := "O)(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=/]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
+	urlR := urlR "\r\nMeeting ID: ([0-9 \b]{8,13})"
+	urlR := urlR "\r\nPassword: ([0-9]{4,20})"
+
+	Success := RegExMatch( text, urlR, RXO )
+
+	RetVal := {}
+	if ( Success > 0 and RXO.Count = 4)
+	{
+		RetVal.url := RXO.Value(1)
+		RetVal.ID  := RXO.Value(3)
+		RetVal.pwd := RXO.Value(4)
+		return, RetVal
+	}
+	return, RXO
+}
+
+
+^+!z::
+	;MinimizeRemoteDesktop()
+	WinActivate, Zoom
+	WinRestore, Zoom
+
+	RXO := ParseZoom( clipboard )
+	url := RXO.url
+	ID  := RXO.ID
+	pwd := RXO.pwd
+
+	Run, chrome.exe %url%
+	Sleep 1000
+	Send {Left}{Enter}
+
+	Sleep 1000
+	WinGetTitle, ActiveWindow, A
+	if ( ActiveWindow = "Enter meeting password" )
+	{
+		Sleep 100
+		Send, %pwd%
+		Sleep 100
+		Send {Enter}
+	}
+
+	Sleep 3000
+	WinGetTitle, ActiveWindow, A
+	if ( ActiveWindow = "Zoom Meeting" )
+	{
+		Send {Enter}
+	}
+
+	Sleep 1000
+	WinGetTitle, ActiveWindow, A
+	if ( ActiveWindow = "Choose ONE of the audio conference options" )
+	{
+		Send {Enter}
+	}
+
+	Sleep 500
+	WinGetTitle, ActiveWindow, A
+	if ( ActiveWindow = "Zoom Meeting" )
+	{
+		Win_Move_Resize(0,1.5,2,0.5,"absolute", 2)
+		ToggleWindowAlwaysOnTop()
+	}
+return
+
+
+/*
+Example
+
+https://blah.zoom.us/j/123456789
+Meeting ID: 123 456 789
+Password: 123456
+
+*/
+
+^!+R::
+{
+	R := ParseZoom( clipboard )
+	MsgBox, %R%
+
+For key, value in R
+    MsgBox %key% = %value%
+
+}
