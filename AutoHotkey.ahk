@@ -34,7 +34,7 @@
 
 #g::Run https://www.google.com
 
-^/::Send {AppsKey}
+;^/::Send {AppsKey}
 ^\::Send {AppsKey}
 
 ; Open a command prompt
@@ -306,6 +306,10 @@ if (false) ; turn this to true for debugging purposes only
 		. `n Top: %MWA1Top%
 		. `n Right: %MWA1Right%
 		. `n Bottom: %MWA1Bottom%
+		. `n Screen1X: %Screen1X%
+		. `n Screen1Y: %Screen1Y%
+		. `n Screen1W: %Screen1W%
+		. `n Screen1H: %Screen1H%
 
 
 ;	SysGet, DisplayMaxW, SM_CXVIRTUALSCREEN
@@ -746,27 +750,13 @@ ToggleWindowAlwaysOnTop()
 	Send ^v
 return
 
-ParseZoom( text )
-{
-	urlR := "/(http|ftp|https):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/"
-
-	urlR := "O)(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=/]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
-	urlR := urlR "\r\nMeeting ID: ([0-9 \b]{8,13})"
-	urlR := urlR "\r\nPassword: ([0-9]{4,20})"
-
-	Success := RegExMatch( text, urlR, RXO )
-
-	RetVal := {}
-	if ( Success > 0 and RXO.Count = 4)
-	{
-		RetVal.url := RXO.Value(1)
-		RetVal.ID  := RXO.Value(3)
-		RetVal.pwd := RXO.Value(4)
-		return, RetVal
-	}
-	return, RXO
-}
-
+^!z::
+	MinimizeRemoteDesktop()
+	Run, chrome.exe %ClipboardAll%
+	Sleep 1000
+	Send {Left}{Enter}
+	Sleep 1000
+return
 
 ^+!z::
 	;MinimizeRemoteDesktop()
@@ -778,11 +768,22 @@ ParseZoom( text )
 	ID  := RXO.ID
 	pwd := RXO.pwd
 
-	Run, chrome.exe %url%
-	Sleep 1000
-	Send {Left}{Enter}
+	MsgBox, "URL: " %url%
 
-	Sleep 1000
+	if ( %url% <> "" )
+	{
+		Run, chrome.exe %url%
+		Sleep 1000
+		Send {Left}{Enter}
+		Sleep 1000
+	}
+	else
+	{
+		WinActivate, Zoom
+		Send, %ID%
+		Send, {Enter}
+	}
+
 	WinGetTitle, ActiveWindow, A
 	if ( ActiveWindow = "Enter meeting password" )
 	{
@@ -816,12 +817,48 @@ ParseZoom( text )
 return
 
 
-/*
-Example
+ParseZoom( text )
+{
+	urlR := "/(http|ftp|https):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?(\\? pwd=(^[a-zA-Z0-9]*))?/"
 
-https://blah.zoom.us/j/123456789
-Meeting ID: 123 456 789
-Password: 123456
+;	urlR := "O)(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=/]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
+;	urlR := "O)(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=/]{1,256})"
+;	urlR := urlR "\r\nMeeting ID: ([0-9 \b]{8,13})"
+;	urlR := urlR "\r\n(?:Computer\s)?Password: ([0-9]{4,20})"
+
+	MsgBox, Attempting to parse: `n %text%
+	MsgBox, Regular Expression: `n %urlR%
+
+	Success := RegExMatch( text, urlR, RXO )
+	MsgBox "RXO" `n %Success%
+
+	RetVal := {}
+	if ( Success > 0 and RXO.Count = 4)
+	{
+		RetVal.url := RXO.Value(1)
+		RetVal.ID  := RXO.Value(3)
+		RetVal.pwd := RXO.Value(4)
+		return, RetVal
+	}
+	return, RXO
+}
+
+/*
+Examples
+
+https://blackstone.zoom.us/j/587185226
+Meeting ID: 587 185 226
+Password: 011509
+
+https://blackstone.zoom.us/j/378832843?pwd=
+Meeting ID: 378 832 843
+Computer Password: 008376
+
+https://blackstone.zoom.us/j/378832843?pwd=WjNuRWJYWk53VWVNWlZ5VDZjeHJCdz09
+Meeting ID: 378 832 843
+Computer Password: 008376
+
+https://blackstone.zoom.us/j/92468201262?pwd=Y3pIL2tEMHk2NWQ4RnNqSU4yVE9tZz09
 
 */
 
@@ -832,5 +869,13 @@ Password: 123456
 
 For key, value in R
     MsgBox %key% = %value%
-
 }
+
+
+^!+B::
+{
+	Send, https://blackstone.zoom.us/j/3032122020
+	Send, {Enter}
+	Send, Meeting ID: 303 212 2020
+}
+
