@@ -879,3 +879,43 @@ For key, value in R
 	Send, Meeting ID: 303 212 2020
 }
 
+^#t:: ; Ctrl+window++T - it will append " - AlwaysOnTop" to windows when they are AlwaysOnTop
+  WinGetActiveTitle, t
+  WinGet, ExStyle, ExStyle, %t%
+  if (ExStyle & 0x8)
+  {
+    WinSet, AlwaysOnTop, Off, %t%
+    WinSetTitle, %t%,, % RegexReplace(t, " - AlwaysOnTop")
+  }
+  else
+  {
+    WinSet, AlwaysOnTop, On, %t%
+    WinSetTitle, %t%,, %t% - AlwaysOnTop
+  }
+return
+
+MoveMouseToActiveWindow()
+{
+	; Move mouse to the center of the active window
+	WinGetPos , , , Width, Height, A
+	mousemove, (width/2), (height/2)
+}
+
+
+; Ctrl + Mouse Right Click
+^RButton::MoveMouseToActiveWindow()
+
+
+#^NumpadSub::
+{
+	MoveMouseToActiveWindow()
+	Send, {CTRLDOWN}{WheelDown}{CTRLUP}
+}
+return
+
+#^NumpadAdd::
+{ 
+	MoveMouseToActiveWindow()
+	Send, {CTRLDOWN}{WheelUp}{CTRLUP}
+}
+return
